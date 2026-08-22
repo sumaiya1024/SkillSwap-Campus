@@ -4,156 +4,178 @@ require_once 'config/db.php';
 require_once 'includes/auth.php';
 requireLogin();
 
-$userId = getCurrentUserId();
+if (isAdmin()) {
+    header('Location: admin/dashboard.php');
+    exit;
+}
 
-// Get student info
-$stmt = mysqli_prepare($conn, "SELECT * FROM students WHERE student_id = ?");
-mysqli_stmt_bind_param($stmt, "i", $userId);
-mysqli_stmt_execute($stmt);
-$student = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+$userId = currentUserId();
 
-// Count my skills
-$stmt = mysqli_prepare($conn, "SELECT COUNT(*) as count FROM student_skills WHERE student_id = ?");
-mysqli_stmt_bind_param($stmt, "i", $userId);
-mysqli_stmt_execute($stmt);
-$mySkillsCount = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt))['count'];
+// Fetch student profile
+$stmt = $pdo->prepare("SELECT s.*, u.email FROM students s JOIN users u ON s.student_id = u.user_id WHERE s.student_id = ?");
+$stmt->execute([$userId]);
+$student = $stmt->fetch();
 
-// Count pending incoming requests
-$stmt = mysqli_prepare($conn, "SELECT COUNT(*) as count FROM skill_requests WHERE provider_id = ? AND status = 'pending'");
-mysqli_stmt_bind_param($stmt, "i", $userId);
-mysqli_stmt_execute($stmt);
-$pendingRequests = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt))['count'];
+// Statistics
+// 1. My Skills Count
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM student_skills WHERE student_id = ?");
+$stmt->execute([$userId]);
+$mySkillsCount = $stmt->fetchColumn();
 
-// Count upcoming sessions (as requester or provider)
-$stmt = mysqli_prepare($conn, "SELECT COUNT(*) as count FROM sessions s JOIN skill_requests sr ON s.request_id = sr.request_id WHERE (sr.requester_id = ? OR sr.provider_id = ?) AND s.status = 'scheduled'");
-mysqli_stmt_bind_param($stmt, "ii", $userId, $userId);
-mysqli_stmt_execute($stmt);
-$upcomingSessions = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt))['count'];
+// 2. Pending Incoming Requests
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM skill_requests WHERE provider_id = ? AND status = 'pending'");
+$stmt->execute([$userId]);
+$pendingRequests = $stmt->fetchColumn();
 
-// Average rating received
-$stmt = mysqli_prepare($conn, "SELECT AVG(rating) as avg_rating, COUNT(*) as review_count FROM reviews WHERE reviewee_id = ?");
-mysqli_stmt_bind_param($stmt, "i", $userId);
-mysqli_stmt_execute($stmt);
-$ratingData = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
-$avgRating = $ratingData['avg_rating'] ? round($ratingData['avg_rating'], 1) : 0;
-$reviewCount = $ratingData['review_count'];
+// 3. Upcoming Scheduled Sessions
+$stmt = $pdo->prepare("SELECT COUNT(*) FROM sessions ses 
+    JOIN skill_requests sr ON ses.request_id = sr.request_id 
+    WHERE (sr.requester_id = ? OR sr.provider_id = ?) AND ses.status = 'scheduled'");
+$stmt->execute([$userId, $userId]);
+$upcomingSessions = $stmt->fetchColumn();
 
-// Recent incoming requests
-$stmt = mysqli_prepare($conn, "SELECT sr.*, s.skill_name, st.full_name as requester_name 
+// 4. Rating & Reviews
+$stmt = $pdo->prepare("SELECT COALESCE(AVG(rating), 0) AS avg_rating, COUNT(*) AS review_count FROM reviews WHERE reviewee_id = ?");
+$stmt->execute([$userId]);
+$ratingData = $stmt->fetch();
+$avgRating = (float)$ratingData['avg_rating'];
+$reviewCount = (int)$ratingData['review_count'];
+
+// Recent Incoming Requests (Limit 5)
+$stmt = $pdo->prepare("SELECT sr.*, sk.skill_name, st.full_name AS requester_name 
     FROM skill_requests sr 
-    JOIN skills s ON sr.skill_id = s.skill_id 
+    JOIN skills sk ON sr.skill_id = sk.skill_id 
     JOIN students st ON sr.requester_id = st.student_id 
-    WHERE sr.provider_id = ? AND sr.status = 'pending' 
+    WHERE sr.provider_id = ? 
     ORDER BY sr.created_at DESC LIMIT 5");
-mysqli_stmt_bind_param($stmt, "i", $userId);
-mysqli_stmt_execute($stmt);
-$recentRequests = mysqli_stmt_get_result($stmt);
+$stmt->execute([$userId]);
+$recentRequests = $stmt->fetchAll();
 
-// Upcoming sessions
-$stmt = mysqli_prepare($conn, "SELECT ses.*, s.skill_name, 
-    st_req.full_name as requester_name, st_prov.full_name as provider_name,
+// Upcoming Sessions (Limit 5)
+$stmt = $pdo->prepare("SELECT ses.*, sk.skill_name, 
+    st_req.full_name AS requester_name, st_prov.full_name AS provider_name,
     sr.requester_id, sr.provider_id
     FROM sessions ses 
     JOIN skill_requests sr ON ses.request_id = sr.request_id 
-    JOIN skills s ON sr.skill_id = s.skill_id 
+    JOIN skills sk ON sr.skill_id = sk.skill_id 
     JOIN students st_req ON sr.requester_id = st_req.student_id
     JOIN students st_prov ON sr.provider_id = st_prov.student_id
     WHERE (sr.requester_id = ? OR sr.provider_id = ?) AND ses.status = 'scheduled' 
-    ORDER BY ses.session_date, ses.session_time LIMIT 5");
-mysqli_stmt_bind_param($stmt, "ii", $userId, $userId);
-mysqli_stmt_execute($stmt);
-$upcomingSessionsList = mysqli_stmt_get_result($stmt);
+    ORDER BY ses.session_date ASC, ses.session_time ASC LIMIT 5");
+$stmt->execute([$userId, $userId]);
+$upcomingSessionsList = $stmt->fetchAll();
 
 include 'includes/header.php';
 ?>
 
-<div class="page-header">
-    <h1><i class="bi bi-grid-1x2 me-2"></i>Dashboard</h1>
-    <p>Welcome back, <?php echo htmlspecialchars($student['full_name']); ?>!</p>
+<div class="page-header d-flex flex-column flex-md-row justify-content-between align-items-md-center">
+    <div>
+        <h1><i class="bi bi-grid-1x2 me-2 text-gradient"></i>Student Dashboard</h1>
+        <p class="text-secondary">Welcome back, <strong><?= htmlspecialchars($student['full_name'] ?? currentUserName()) ?></strong>! Here is an overview of your skill sharing activity.</p>
+    </div>
+    <div class="mt-3 mt-md-0">
+        <a href="browse_students.php" class="btn btn-accent"><i class="bi bi-search me-1"></i>Find Skills</a>
+    </div>
 </div>
 
-<!-- Stats Row -->
+<!-- Statistics Cards -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-lg-3">
         <div class="stat-card">
             <div class="stat-icon purple"><i class="bi bi-lightbulb"></i></div>
-            <div class="stat-number"><?php echo $mySkillsCount; ?></div>
-            <div class="stat-label">My Skills</div>
+            <div class="stat-number text-gradient"><?= $mySkillsCount ?></div>
+            <div class="stat-label">My Skills Listed</div>
         </div>
     </div>
     <div class="col-6 col-lg-3">
         <div class="stat-card">
-            <div class="stat-icon teal"><i class="bi bi-envelope"></i></div>
-            <div class="stat-number"><?php echo $pendingRequests; ?></div>
+            <div class="stat-icon teal"><i class="bi bi-inbox"></i></div>
+            <div class="stat-number text-gradient"><?= $pendingRequests ?></div>
             <div class="stat-label">Pending Requests</div>
         </div>
     </div>
     <div class="col-6 col-lg-3">
         <div class="stat-card">
-            <div class="stat-icon green"><i class="bi bi-calendar-event"></i></div>
-            <div class="stat-number"><?php echo $upcomingSessions; ?></div>
+            <div class="stat-icon green"><i class="bi bi-calendar-check"></i></div>
+            <div class="stat-number text-gradient"><?= $upcomingSessions ?></div>
             <div class="stat-label">Upcoming Sessions</div>
         </div>
     </div>
     <div class="col-6 col-lg-3">
         <div class="stat-card">
             <div class="stat-icon orange"><i class="bi bi-star"></i></div>
-            <div class="stat-number"><?php echo $avgRating > 0 ? $avgRating : '—'; ?></div>
-            <div class="stat-label"><?php echo $reviewCount; ?> Reviews</div>
+            <div class="stat-number text-gradient"><?= $avgRating > 0 ? number_format($avgRating, 1) : '—' ?></div>
+            <div class="stat-label"><?= $reviewCount ?> Reviews Received</div>
         </div>
     </div>
 </div>
 
-<!-- Quick Actions -->
+<!-- Quick Navigation Bar -->
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
-        <a href="my_skills.php" class="btn btn-primary w-100 py-3">
-            <i class="bi bi-plus-circle me-1"></i> Add Skills
+    <div class="col-md-3">
+        <a href="skills.php" class="btn btn-outline-light w-100 py-2 d-flex align-items-center justify-content-center">
+            <i class="bi bi-plus-circle me-2 text-primary"></i>Manage My Skills
         </a>
     </div>
-    <div class="col-md-4">
-        <a href="browse.php" class="btn btn-accent w-100 py-3">
-            <i class="bi bi-search me-1"></i> Browse Students
+    <div class="col-md-3">
+        <a href="browse_students.php" class="btn btn-outline-light w-100 py-2 d-flex align-items-center justify-content-center">
+            <i class="bi bi-people me-2 text-accent"></i>Browse Students
         </a>
     </div>
-    <div class="col-md-4">
-        <a href="incoming_requests.php" class="btn btn-outline-light w-100 py-3">
-            <i class="bi bi-inbox me-1"></i> View Incoming Requests
+    <div class="col-md-3">
+        <a href="requests.php" class="btn btn-outline-light w-100 py-2 d-flex align-items-center justify-content-center">
+            <i class="bi bi-envelope me-2 text-warning"></i>Exchange Requests
+        </a>
+    </div>
+    <div class="col-md-3">
+        <a href="sessions.php" class="btn btn-outline-light w-100 py-2 d-flex align-items-center justify-content-center">
+            <i class="bi bi-calendar-event me-2 text-success"></i>Booked Sessions
         </a>
     </div>
 </div>
 
 <div class="row g-4">
-    <!-- Recent Incoming Requests -->
+    <!-- Recent Requests -->
     <div class="col-lg-6">
-        <div class="card">
+        <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-envelope me-2"></i>Recent Requests</span>
-                <a href="incoming_requests.php" class="btn btn-sm btn-outline-light">View All</a>
+                <span><i class="bi bi-envelope me-2 text-warning"></i>Recent Requests Received</span>
+                <a href="requests.php" class="btn btn-sm btn-outline-light">View All</a>
             </div>
             <div class="card-body p-0">
-                <?php if (mysqli_num_rows($recentRequests) > 0): ?>
+                <?php if (!empty($recentRequests)): ?>
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Learner</th>
+                                    <th>Skill</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
                             <tbody>
-                                <?php while ($req = mysqli_fetch_assoc($recentRequests)): ?>
+                                <?php foreach ($recentRequests as $req): ?>
                                 <tr>
                                     <td>
-                                        <strong><?php echo htmlspecialchars($req['requester_name']); ?></strong><br>
-                                        <small class="text-muted">wants to learn <span class="skill-tag"><?php echo htmlspecialchars($req['skill_name']); ?></span></small>
+                                        <strong><?= htmlspecialchars($req['requester_name']) ?></strong>
+                                        <div class="small text-muted"><?= date('M d, Y', strtotime($req['created_at'])) ?></div>
                                     </td>
-                                    <td class="text-end">
-                                        <span class="badge badge-pending">Pending</span>
+                                    <td><span class="skill-tag"><?= htmlspecialchars($req['skill_name']) ?></span></td>
+                                    <td>
+                                        <span class="badge badge-<?= $req['status'] ?>">
+                                            <?= ucfirst($req['status']) ?>
+                                        </span>
                                     </td>
                                 </tr>
-                                <?php endwhile; ?>
+                                <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
                 <?php else: ?>
                     <div class="empty-state py-4">
                         <i class="bi bi-inbox"></i>
-                        <h6>No pending requests</h6>
+                        <h6>No requests received yet</h6>
+                        <p class="mb-0">Add more teaching skills so peers can find and learn from you!</p>
                     </div>
                 <?php endif; ?>
             </div>
@@ -162,37 +184,48 @@ include 'includes/header.php';
 
     <!-- Upcoming Sessions -->
     <div class="col-lg-6">
-        <div class="card">
+        <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-calendar-event me-2"></i>Upcoming Sessions</span>
-                <a href="my_sessions.php" class="btn btn-sm btn-outline-light">View All</a>
+                <span><i class="bi bi-calendar-event me-2 text-success"></i>Upcoming Scheduled Sessions</span>
+                <a href="sessions.php" class="btn btn-sm btn-outline-light">View All</a>
             </div>
             <div class="card-body p-0">
-                <?php if (mysqli_num_rows($upcomingSessionsList) > 0): ?>
+                <?php if (!empty($upcomingSessionsList)): ?>
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Skill & Partner</th>
+                                    <th>Date & Time</th>
+                                    <th>Location</th>
+                                </tr>
+                            </thead>
                             <tbody>
-                                <?php while ($ses = mysqli_fetch_assoc($upcomingSessionsList)): ?>
+                                <?php foreach ($upcomingSessionsList as $ses): 
+                                    $isRequester = ($ses['requester_id'] == $userId);
+                                    $partnerName = $isRequester ? $ses['provider_name'] : $ses['requester_name'];
+                                    $roleLabel = $isRequester ? '(Teacher: ' . $partnerName . ')' : '(Learner: ' . $partnerName . ')';
+                                ?>
                                 <tr>
                                     <td>
-                                        <strong><?php echo htmlspecialchars($ses['skill_name']); ?></strong><br>
-                                        <small class="text-muted">
-                                            with <?php echo htmlspecialchars($ses['requester_id'] == $userId ? $ses['provider_name'] : $ses['requester_name']); ?>
-                                        </small>
+                                        <strong><?= htmlspecialchars($ses['skill_name']) ?></strong>
+                                        <div class="small text-muted"><?= htmlspecialchars($roleLabel) ?></div>
                                     </td>
-                                    <td class="text-end">
-                                        <small><?php echo date('M d', strtotime($ses['session_date'])); ?></small><br>
-                                        <small class="text-muted"><?php echo date('h:i A', strtotime($ses['session_time'])); ?></small>
+                                    <td>
+                                        <div><?= date('M d, Y', strtotime($ses['session_date'])) ?></div>
+                                        <div class="small text-muted"><?= date('h:i A', strtotime($ses['session_time'])) ?> (<?= $ses['duration_minutes'] ?> min)</div>
                                     </td>
+                                    <td><small class="text-secondary"><?= htmlspecialchars($ses['location'] ?: 'Not specified') ?></small></td>
                                 </tr>
-                                <?php endwhile; ?>
+                                <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
                 <?php else: ?>
                     <div class="empty-state py-4">
                         <i class="bi bi-calendar-x"></i>
-                        <h6>No upcoming sessions</h6>
+                        <h6>No upcoming sessions scheduled</h6>
+                        <p class="mb-0">Accept a request or ask a peer to book a session.</p>
                     </div>
                 <?php endif; ?>
             </div>

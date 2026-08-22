@@ -1,21 +1,24 @@
 <?php
 // =============================================
-// Database Configuration — SkillSwap Campus
+// Database Connection — PDO (MySQL 8)
 // =============================================
 
 $db_host = 'localhost';
+$db_name = 'skillswap_campus';
 $db_user = 'root';
 $db_pass = '';
-$db_name = 'skillswap_campus';
 
-// Create connection
-$conn = mysqli_connect($db_host, $db_user, $db_pass, $db_name);
-
-// Check connection
-if (!$conn) {
-    die("Connection failed: " . mysqli_connect_error());
+try {
+    $pdo = new PDO(
+        "mysql:host=$db_host;dbname=$db_name;charset=utf8mb4",
+        $db_user,
+        $db_pass,
+        [
+            PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
+            PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+            PDO::ATTR_EMULATE_PREPARES   => false,
+        ]
+    );
+} catch (PDOException $e) {
+    die("Database connection failed: " . $e->getMessage());
 }
-
-// Set charset to utf8
-mysqli_set_charset($conn, "utf8");
-?>
