@@ -125,13 +125,13 @@ CREATE TABLE reviews (
 
 -- Admin user (password: admin123)
 INSERT INTO users (email, password, role) VALUES
-('admin@skillswap.com', '$2y$10$8K1p/a0dL1LXMw0HQ7p6Pu5HkPqPq0vqyQW0Z7YB3mF8z3vGpKxSy', 'admin');
+('admin@skillswap.com', '$2y$10$t63GDfnOPbwqOSrXYZi0mOd7RrHTLfJ.qidEouC6cbmGfFwz6yqgi', 'admin');
 
 -- Sample students (password: password123)
 INSERT INTO users (email, password, role) VALUES
-('alice@university.edu', '$2y$10$8K1p/a0dL1LXMw0HQ7p6Pu5HkPqPq0vqyQW0Z7YB3mF8z3vGpKxSy', 'student'),
-('bob@university.edu', '$2y$10$8K1p/a0dL1LXMw0HQ7p6Pu5HkPqPq0vqyQW0Z7YB3mF8z3vGpKxSy', 'student'),
-('carol@university.edu', '$2y$10$8K1p/a0dL1LXMw0HQ7p6Pu5HkPqPq0vqyQW0Z7YB3mF8z3vGpKxSy', 'student');
+('alice@university.edu', '$2y$10$ARrynK4DXxfhMWaA2v6zzup3rL07ns4ReAQcf1Yin9n1ryEMyr2/G', 'student'),
+('bob@university.edu', '$2y$10$ARrynK4DXxfhMWaA2v6zzup3rL07ns4ReAQcf1Yin9n1ryEMyr2/G', 'student'),
+('carol@university.edu', '$2y$10$ARrynK4DXxfhMWaA2v6zzup3rL07ns4ReAQcf1Yin9n1ryEMyr2/G', 'student');
 
 INSERT INTO students (student_id, full_name, university_id, department, bio, phone) VALUES
 (2, 'Alice Johnson', 'STU-2024-001', 'Computer Science', 'I love coding and web development!', '01712345678'),
