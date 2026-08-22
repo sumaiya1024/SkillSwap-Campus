@@ -1,17 +1,20 @@
 <?php
-$pageTitle = 'Login';
+$pageTitle = 'Sign In';
 require_once 'config/db.php';
 require_once 'includes/auth.php';
 
-if (isLoggedIn()) { header('Location: dashboard.php'); exit; }
+if (isLoggedIn()) { 
+    header('Location: dashboard.php'); 
+    exit; 
+}
 
 $errors = [];
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email    = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
 
-    if (!$email)    $errors[] = 'Email is required.';
-    if (!$password) $errors[] = 'Password is required.';
+    if (!$email)    $errors[] = 'Please enter your email address.';
+    if (!$password) $errors[] = 'Please enter your password.';
 
     if (!$errors) {
         $stmt = $pdo->prepare("SELECT user_id, email, password, role FROM users WHERE email = ?");
@@ -29,48 +32,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['full_name'] = $s->fetchColumn() ?: 'Student';
                 header('Location: dashboard.php');
             } else {
-                $_SESSION['full_name'] = 'Admin';
+                $_SESSION['full_name'] = 'Administrator';
                 header('Location: admin/dashboard.php');
             }
             exit;
         }
-        $errors[] = 'Invalid email or password.';
+        $errors[] = 'Invalid email or password. Please try again.';
     }
 }
 
 include 'includes/header.php';
 ?>
 
-<div class="auth-wrapper">
+<div class="auth-wrapper my-5">
     <div class="auth-card">
         <div class="text-center mb-4">
-            <i class="bi bi-arrow-left-right" style="font-size:2.5rem;color:var(--accent)"></i>
-            <h2 class="mt-2">Welcome Back</h2>
-            <p class="subtitle">Sign in to your SkillSwap account</p>
+            <div class="avatar-placeholder md mx-auto mb-2" style="background: linear-gradient(135deg, var(--primary), var(--accent));">
+                <i class="bi bi-mortarboard fs-3 text-white"></i>
+            </div>
+            <h2 class="mt-2 fw-bold">Sign In to Campus</h2>
+            <p class="subtitle">Enter your student credentials to continue</p>
         </div>
 
         <?php if ($errors): ?>
-            <div class="alert alert-danger"><?php foreach($errors as $e) echo '<div>'.htmlspecialchars($e).'</div>'; ?></div>
+            <div class="alert alert-danger">
+                <?php foreach($errors as $e): ?>
+                    <div><i class="bi bi-exclamation-circle me-1"></i><?= htmlspecialchars($e) ?></div>
+                <?php endforeach; ?>
+            </div>
         <?php endif; ?>
 
         <form method="POST">
             <div class="mb-3">
-                <label for="email" class="form-label">Email Address</label>
-                <input type="email" class="form-control" id="email" name="email" value="<?= htmlspecialchars($email ?? '') ?>" placeholder="you@university.edu" required>
+                <label for="email" class="form-label">University Email</label>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                    <input type="email" class="form-control" id="email" name="email" value="<?= htmlspecialchars($email ?? '') ?>" placeholder="student@university.edu" required autofocus>
+                </div>
             </div>
+
             <div class="mb-3">
                 <label for="password" class="form-label">Password</label>
-                <input type="password" class="form-control" id="password" name="password" placeholder="Enter your password" required>
+                <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                    <input type="password" class="form-control" id="password" name="password" placeholder="••••••••" required>
+                </div>
             </div>
-            <button type="submit" class="btn btn-primary w-100 py-2 mt-2"><i class="bi bi-box-arrow-in-right me-1"></i>Login</button>
+
+            <button type="submit" class="btn btn-primary w-100 py-2 mt-3">
+                <i class="bi bi-box-arrow-in-right me-1"></i>Sign In
+            </button>
         </form>
 
         <div class="text-center mt-3">
-            <span class="text-muted">Don't have an account?</span> <a href="register.php">Register here</a>
+            <span class="text-secondary small">New to SkillSwap Campus?</span> 
+            <a href="register.php" class="fw-semibold small ms-1">Create an account</a>
         </div>
-        <hr style="border-color:var(--border-color)">
-        <div class="text-center">
-            <small class="text-muted">Demo: <code>alice@university.edu</code> / <code>password123</code><br>Admin: <code>admin@skillswap.com</code> / <code>admin123</code></small>
+
+        <hr style="border-color: var(--border-color);" class="my-4">
+
+        <!-- Demo Accounts Box -->
+        <div class="p-3 rounded" style="background: rgba(255, 255, 255, 0.02); border: 1px dashed var(--border-color);">
+            <div class="d-flex align-items-center gap-1 mb-2">
+                <i class="bi bi-info-circle text-accent"></i>
+                <strong class="small text-light">Quick Demo Access</strong>
+            </div>
+            <div class="small text-secondary mb-1">
+                <strong>Student:</strong> <code>alice@university.edu</code> / <code>password123</code>
+            </div>
+            <div class="small text-secondary">
+                <strong>Admin:</strong> <code>admin@skillswap.com</code> / <code>admin123</code>
+            </div>
         </div>
     </div>
 </div>
